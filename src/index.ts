@@ -12,7 +12,7 @@ import { Resend } from "resend";
 
 interface PopulatedFriendRequest {
   id: string;
-  fromUserId: any; // Mongoose populated object
+  fromUserId: any;
   toUserId: string;
   status: string;
   createdAt: Date;
@@ -33,7 +33,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const googleClient = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  `${process.env.FRONTEND_URL}/auth/google/callback`
+  `${process.env.FRONTEND_URL}/auth/google/callback`,
 );
 
 const MONGODB_URI =
@@ -47,7 +47,6 @@ mongoose
     process.exit(1);
   });
 
-// MongoDB Schemas
 const userSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, unique: true },
@@ -60,9 +59,9 @@ const userSchema = new mongoose.Schema(
     lastSeen: { type: Date, default: Date.now },
     resetToken: String,
     resetTokenExpiry: Date,
-    googleId: { type: String, unique: true, sparse: true }, // sparse allows multiple nulls
+    googleId: { type: String, unique: true, sparse: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 const friendRequestSchema = new mongoose.Schema(
   {
@@ -70,12 +69,12 @@ const friendRequestSchema = new mongoose.Schema(
     fromUserId: {
       type: String,
       required: true,
-      ref: "User", // ✅ ADD THIS to enable population
+      ref: "User",
     },
     toUserId: {
       type: String,
       required: true,
-      ref: "User", // ✅ ADD THIS to enable population
+      ref: "User",
     },
     status: {
       type: String,
@@ -84,7 +83,7 @@ const friendRequestSchema = new mongoose.Schema(
     },
     createdAt: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 const friendsSchema = new mongoose.Schema(
   {
@@ -93,7 +92,7 @@ const friendsSchema = new mongoose.Schema(
     friendId: { type: String, required: true },
     friendsSince: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const FriendRequest = mongoose.model("FriendRequest", friendRequestSchema);
@@ -125,7 +124,7 @@ const channelSchema = new mongoose.Schema(
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const messageSchema = new mongoose.Schema(
@@ -134,24 +133,23 @@ const messageSchema = new mongoose.Schema(
     content: { type: String, required: true },
     userId: { type: String, required: true },
     username: { type: String, required: true },
-    userImage: { type: String }, // ADD THIS FIELD
+    userImage: { type: String },
     channelId: { type: String, required: true },
     type: {
       type: String,
       default: "text",
-      enum: ["text", "image", "file", "gif"], // ADD "gif" HERE
+      enum: ["text", "image", "file", "gif"],
     },
     timestamp: { type: Date, default: Date.now },
     seenBy: [
       {
-        // ADD THIS
         userId: { type: String, required: true },
         timestamp: { type: Date, default: Date.now },
       },
     ],
-    deliveredTo: [{ type: String }], // Optional: track delivery
+    deliveredTo: [{ type: String }],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const User = mongoose.model("User", userSchema);
@@ -186,7 +184,6 @@ const sendEmail = async (to: string, subject: string, html: string) => {
     return false;
   }
 };
-// Request logging
 app.use((req, res, next) => {
   console.log(`📥 ${req.method} ${req.path}`, {
     ip: req.ip,
@@ -196,7 +193,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Root route - FIXES "Cannot GET /"
 app.get("/", (req, res) => {
   res.json({
     message: "Blabber Backend API is running! 🚀",
@@ -212,7 +208,6 @@ app.get("/", (req, res) => {
   });
 });
 
-// Health check endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({
     status: "OK",
@@ -222,8 +217,6 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Test endpoint
-// Test endpoint - FIXED FOR MONGODB
 app.get("/api/test", async (req, res) => {
   try {
     const userCount = await User.countDocuments();
@@ -251,7 +244,6 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true,
   },
-  // ADD THESE OPTIONS FOR v4 COMPATIBILITY
   connectTimeout: 45000,
   pingTimeout: 20000,
   pingInterval: 25000,
@@ -262,7 +254,7 @@ app.use(
   cors({
     origin: FRONTEND_URL,
     credentials: true,
-  })
+  }),
 );
 app.use(express.json({ limit: "10mb" }));
 app.post("/api/friends/request", async (req, res) => {
@@ -321,7 +313,6 @@ app.post("/api/friends/request", async (req, res) => {
 
     await friendRequest.save();
 
-    // ✅ EMIT WITH COMPLETE USER DATA
     io.emit("friend:request:sent", {
       requestId: friendRequest.id,
       fromUser: {
@@ -350,12 +341,11 @@ app.get("/api/friends/:userId", async (req, res) => {
 
     const friendships = await Friends.find({ userId });
 
-    // Manually fetch user data since we can't use populate with string IDs
     const friends = await Promise.all(
       friendships.map(async (friendship) => {
         const friendUser = await User.findOne(
           { id: friendship.friendId },
-          { password: 0, resetToken: 0, resetTokenExpiry: 0 }
+          { password: 0, resetToken: 0, resetTokenExpiry: 0 },
         );
 
         return {
@@ -369,7 +359,7 @@ app.get("/api/friends/:userId", async (req, res) => {
           isOnline: friendUser?.isOnline,
           lastSeen: friendUser?.lastSeen,
         };
-      })
+      }),
     );
 
     console.log(`📥 Fetched ${friends.length} friends for user ${userId}`);
@@ -384,14 +374,12 @@ app.get("/api/friends/:userId", async (req, res) => {
   }
 });
 
-// ✅ FIXED: GET FRIEND REQUESTS (NO POPULATE - MANUAL FETCH)
 app.get("/api/friends/requests/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
 
     console.log(`📥 Fetching friend requests for user: ${userId}`);
 
-    // Get pending requests
     const pendingRequests = await FriendRequest.find({
       toUserId: userId,
       status: "pending",
@@ -399,17 +387,16 @@ app.get("/api/friends/requests/:userId", async (req, res) => {
 
     console.log(`Found ${pendingRequests.length} pending requests`);
 
-    // Manually fetch user data for each request
     const transformedRequests = await Promise.all(
       pendingRequests.map(async (request: any) => {
         const fromUser = await User.findOne(
           { id: request.fromUserId },
-          { password: 0, resetToken: 0, resetTokenExpiry: 0 }
+          { password: 0, resetToken: 0, resetTokenExpiry: 0 },
         );
 
         console.log(
           `Request from ${request.fromUserId}:`,
-          fromUser ? `Found user: ${fromUser.username}` : "User not found"
+          fromUser ? `Found user: ${fromUser.username}` : "User not found",
         );
 
         return {
@@ -429,12 +416,12 @@ app.get("/api/friends/requests/:userId", async (req, res) => {
               }
             : null,
         };
-      })
+      }),
     );
 
     console.log(
       `✅ Returning ${transformedRequests.length} friend requests`,
-      transformedRequests
+      transformedRequests,
     );
 
     res.json({
@@ -468,7 +455,6 @@ app.post("/api/friends/accept", async (req, res) => {
     friendRequest.status = "accepted";
     await friendRequest.save();
 
-    // Create bidirectional friendship
     const friendship1 = new Friends({
       id: "friends_" + Date.now(),
       userId: friendRequest.fromUserId,
@@ -486,7 +472,6 @@ app.post("/api/friends/accept", async (req, res) => {
     const fromUser = await User.findOne({ id: friendRequest.fromUserId });
     const toUser = await User.findOne({ id: friendRequest.toUserId });
 
-    // ✅ EMIT WITH COMPLETE DATA
     io.emit("friend:request:accepted", {
       requestId,
       fromUser: {
@@ -553,7 +538,6 @@ app.delete("/api/friends/remove", async (req, res) => {
   try {
     const { userId, friendId } = req.body;
 
-    // Remove both directions of friendship
     await Friends.deleteMany({
       $or: [
         { userId, friendId },
@@ -561,7 +545,6 @@ app.delete("/api/friends/remove", async (req, res) => {
       ],
     });
 
-    // Also delete any friend requests between them
     await FriendRequest.deleteMany({
       $or: [
         { fromUserId: userId, toUserId: friendId },
@@ -569,7 +552,6 @@ app.delete("/api/friends/remove", async (req, res) => {
       ],
     });
 
-    // Emit real-time update
     io.emit("friend:removed", {
       userId,
       friendId,
@@ -601,10 +583,10 @@ app.get("/api/users/search", async (req, res) => {
               { email: { $regex: query, $options: "i" } },
             ],
           },
-          { id: { $ne: currentUserId } }, // Exclude current user
+          { id: { $ne: currentUserId } },
         ],
       },
-      { password: 0 }
+      { password: 0 },
     );
 
     res.json({
@@ -616,9 +598,6 @@ app.get("/api/users/search", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// Google OAuth callback endpoint
-// Google OAuth callback endpoint - ΕΠΕΚΤΕΙΝΗΜΕΝΟ
-// Google OAuth callback endpoint - UPDATED WITH CLOUDINARY UPLOAD
 app.post("/api/auth/google", async (req, res) => {
   try {
     const { code, mode = "login" } = req.body;
@@ -630,7 +609,6 @@ app.post("/api/auth/google", async (req, res) => {
       });
     }
 
-    // Exchange code for tokens
     const { tokens } = await googleClient.getToken({
       code: code,
       redirect_uri: `${process.env.FRONTEND_URL}/auth/google/callback`,
@@ -643,7 +621,6 @@ app.post("/api/auth/google", async (req, res) => {
       });
     }
 
-    // Verify the ID token
     const ticket = await googleClient.verifyIdToken({
       idToken: tokens.id_token,
       audience: process.env.GOOGLE_CLIENT_ID,
@@ -658,7 +635,6 @@ app.post("/api/auth/google", async (req, res) => {
       });
     }
 
-    // Extract user information
     const {
       sub: googleId,
       email,
@@ -675,12 +651,10 @@ app.post("/api/auth/google", async (req, res) => {
       });
     }
 
-    // Check if user exists in database
     let user = await User.findOne({
       $or: [{ email: email.toLowerCase() }, { googleId: googleId }],
     });
 
-    // ✅ KEY FIX: If user doesn't exist and mode is LOGIN, send needsSignup
     if (!user && mode === "login") {
       return res.status(401).json({
         success: false,
@@ -692,7 +666,6 @@ app.post("/api/auth/google", async (req, res) => {
     }
 
     if (!user) {
-      // SIGNUP MODE - Create new user
       const baseUsername = email
         .split("@")[0]
         .toLowerCase()
@@ -700,24 +673,21 @@ app.post("/api/auth/google", async (req, res) => {
       let username = baseUsername;
       let counter = 1;
 
-      // Ensure username is unique
       while (await User.findOne({ username })) {
         username = `${baseUsername}${counter}`;
         counter++;
       }
 
       let userImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-        name || username
+        name || username,
       )}&background=random&color=000000&bold=true`;
 
-      // ✅ NEW: Upload Google profile picture to Cloudinary if available
       if (picture) {
         try {
           console.log(
-            `📤 Uploading Google profile image to Cloudinary for ${email}`
+            `📤 Uploading Google profile image to Cloudinary for ${email}`,
           );
 
-          // Upload the Google image to Cloudinary
           const uploadResult = await cloudinary.uploader.upload(picture, {
             folder: "blabber/users",
             quality: "auto:best",
@@ -734,24 +704,22 @@ app.post("/api/auth/google", async (req, res) => {
         } catch (uploadError) {
           console.error(
             "❌ Failed to upload Google image to Cloudinary:",
-            uploadError
+            uploadError,
           );
-          // Fall back to the original Google picture URL if upload fails
           userImage = picture;
           console.log(`⚠️ Using original Google image URL: ${userImage}`);
         }
       }
 
-      // Create new user with Google data
       user = new User({
         id: "user_" + Date.now(),
         username: username,
         email: email.toLowerCase(),
         password: await bcrypt.hash(
           Math.random().toString(36) + Date.now().toString(),
-          12
+          12,
         ),
-        image: userImage, // Use the Cloudinary URL or fallback
+        image: userImage,
         isOnline: true,
         lastSeen: new Date(),
         googleId: googleId,
@@ -761,7 +729,6 @@ app.post("/api/auth/google", async (req, res) => {
       await user.save();
       console.log(`✅ New Google user registered: ${username} (${email})`);
 
-      // Send welcome email
       setTimeout(async () => {
         try {
           const mailOptions = {
@@ -827,19 +794,17 @@ app.post("/api/auth/google", async (req, res) => {
         } catch (emailError) {
           console.log(
             "⚠️ Failed to send welcome email to Google user:",
-            emailError
+            emailError,
           );
         }
       }, 0);
     } else if (user) {
-      // LOGIN MODE - Update existing user and potentially update profile picture
       user.googleId = googleId;
 
-      // ✅ NEW: Update profile picture to Cloudinary if it's still the Google URL
       if (picture && user.image === picture) {
         try {
           console.log(
-            `📤 Updating existing Google user image to Cloudinary for ${email}`
+            `📤 Updating existing Google user image to Cloudinary for ${email}`,
           );
 
           const uploadResult = await cloudinary.uploader.upload(picture, {
@@ -855,17 +820,15 @@ app.post("/api/auth/google", async (req, res) => {
 
           user.image = uploadResult.secure_url;
           console.log(
-            `✅ Existing Google image uploaded to Cloudinary: ${user.image}`
+            `✅ Existing Google image uploaded to Cloudinary: ${user.image}`,
           );
         } catch (uploadError) {
           console.error(
             "❌ Failed to upload existing Google image to Cloudinary:",
-            uploadError
+            uploadError,
           );
-          // Keep the current image if upload fails
         }
       } else if (picture && user.image !== picture) {
-        // If the Google picture changed, update it
         user.image = picture;
       }
 
@@ -875,7 +838,6 @@ app.post("/api/auth/google", async (req, res) => {
       console.log(`✅ Google user logged in: ${user.username} (${email})`);
     }
 
-    // Return user data
     const userResponse = {
       id: user.id,
       username: user.username,
@@ -901,18 +863,10 @@ app.post("/api/auth/google", async (req, res) => {
     });
   }
 });
-// In-memory storage
-// const users = new Map<string, any>();
-// const registeredUsers = new Map<string, any>();
-// const channels: any[] = [];
-// const messages: any[] = [];
-
-// Helper function to generate invite code
 const generateInviteCode = () => {
   return Math.random().toString(36).substring(2, 10).toUpperCase();
 };
 
-// Configure Cloudinary - FIXED
 try {
   cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -923,27 +877,22 @@ try {
 } catch (error) {
   console.error("❌ Cloudinary configuration failed:", error);
 }
-// ADD THIS HELPER FUNCTION FOR DELETING CLOUDINARY IMAGES
 const deleteCloudinaryImage = async (imageUrl: string) => {
   try {
     if (!imageUrl || !imageUrl.includes("cloudinary.com")) {
       console.log("⚠️ Not a Cloudinary URL, skipping deletion:", imageUrl);
-      return true; // Return true for non-Cloudinary URLs (like ui-avatars)
+      return true;
     }
 
-    // Extract public ID from Cloudinary URL
-    // Cloudinary URLs format: https://res.cloudinary.com/cloudname/image/upload/v1234567/folder/filename.jpg
     const url = new URL(imageUrl);
     const pathParts = url.pathname.split("/");
 
-    // Find the index after 'upload'
     const uploadIndex = pathParts.indexOf("upload");
     if (uploadIndex === -1) {
       console.log("❌ Invalid Cloudinary URL format");
       return false;
     }
 
-    // Get everything after 'upload' and remove version prefix (v1234567/)
     const pathAfterUpload = pathParts.slice(uploadIndex + 1).join("/");
     const publicId = pathAfterUpload
       .replace(/^v\d+\//, "")
@@ -965,9 +914,6 @@ const deleteCloudinaryImage = async (imageUrl: string) => {
     return false;
   }
 };
-// Add upload endpoint for channel images
-// Simple upload endpoint without multer
-// Add this endpoint for message images
 app.post(
   "/api/upload/message-image",
   express.json({ limit: "10mb" }),
@@ -982,7 +928,6 @@ app.post(
         });
       }
 
-      // Upload to Cloudinary
       const result = await cloudinary.uploader.upload(image, {
         folder: "blabber/messages",
         quality: "auto:good",
@@ -1002,7 +947,7 @@ app.post(
         message: "Upload failed: " + error.message,
       });
     }
-  }
+  },
 );
 app.post(
   "/api/upload/channel-image",
@@ -1018,7 +963,6 @@ app.post(
         });
       }
 
-      // Upload to Cloudinary with better quality
       const result = await cloudinary.uploader.upload(image, {
         folder: "blabber/channels",
         quality: "auto:best",
@@ -1041,11 +985,8 @@ app.post(
         message: "Upload failed: " + error.message,
       });
     }
-  }
+  },
 );
-// Channel Settings Endpoints
-
-// Get channel members
 app.get("/api/channel/:channelId/members", async (req, res) => {
   try {
     const { channelId } = req.params;
@@ -1055,10 +996,9 @@ app.get("/api/channel/:channelId/members", async (req, res) => {
       return res.status(404).json({ error: "Channel not found" });
     }
 
-    // Get all members with their user data
     const members = await User.find(
       { id: { $in: channel.members } },
-      { password: 0, resetToken: 0, resetTokenExpiry: 0 }
+      { password: 0, resetToken: 0, resetTokenExpiry: 0 },
     );
 
     res.json({ success: true, members });
@@ -1068,7 +1008,6 @@ app.get("/api/channel/:channelId/members", async (req, res) => {
   }
 });
 
-// Add member to channel
 app.post("/api/channel/:channelId/members", async (req, res) => {
   try {
     const { channelId } = req.params;
@@ -1085,7 +1024,6 @@ app.post("/api/channel/:channelId/members", async (req, res) => {
       return res.status(404).json({ error: "Channel not found" });
     }
 
-    // Check if user has permission to add members
     if (channel.createdBy !== addedBy) {
       return res
         .status(403)
@@ -1101,15 +1039,13 @@ app.post("/api/channel/:channelId/members", async (req, res) => {
       return res.status(400).json({ error: "User is already a member" });
     }
 
-    // Add user to channel members
     channel.members.push(userToAdd.id);
     await channel.save();
 
     console.log(
-      `✅ User ${userToAdd.username} added to channel ${channel.name}`
+      `✅ User ${userToAdd.username} added to channel ${channel.name}`,
     );
 
-    // Broadcast channel update
     io.emit("channel:updated", channel);
 
     res.json({
@@ -1122,7 +1058,6 @@ app.post("/api/channel/:channelId/members", async (req, res) => {
   }
 });
 
-// Remove member from channel
 app.delete("/api/channel/:channelId/members/:memberId", async (req, res) => {
   try {
     const { channelId, memberId } = req.params;
@@ -1137,14 +1072,12 @@ app.delete("/api/channel/:channelId/members/:memberId", async (req, res) => {
       return res.status(404).json({ error: "Channel not found" });
     }
 
-    // Check if user has permission to remove members
     if (channel.createdBy !== removedBy) {
       return res
         .status(403)
         .json({ error: "Only channel creator can remove members" });
     }
 
-    // Prevent removing the creator
     if (memberId === channel.createdBy) {
       return res.status(400).json({ error: "Cannot remove channel creator" });
     }
@@ -1155,13 +1088,11 @@ app.delete("/api/channel/:channelId/members/:memberId", async (req, res) => {
         .json({ error: "User is not a member of this channel" });
     }
 
-    // Remove user from channel members
     channel.members = channel.members.filter((id) => id !== memberId);
     await channel.save();
 
     console.log(`✅ User ${memberId} removed from channel ${channel.name}`);
 
-    // Broadcast channel update
     io.emit("channel:updated", channel);
 
     res.json({
@@ -1174,7 +1105,6 @@ app.delete("/api/channel/:channelId/members/:memberId", async (req, res) => {
   }
 });
 
-// Leave channel
 app.post("/api/channel/:channelId/leave", async (req, res) => {
   try {
     const { channelId } = req.params;
@@ -1189,7 +1119,6 @@ app.post("/api/channel/:channelId/leave", async (req, res) => {
       return res.status(404).json({ error: "Channel not found" });
     }
 
-    // Prevent creator from leaving (they should delete the channel instead)
     if (channel.createdBy === userId) {
       return res.status(400).json({
         error:
@@ -1203,16 +1132,13 @@ app.post("/api/channel/:channelId/leave", async (req, res) => {
         .json({ error: "You are not a member of this channel" });
     }
 
-    // Remove user from channel members
     channel.members = channel.members.filter((id) => id !== userId);
     await channel.save();
 
     console.log(`✅ User ${userId} left channel ${channel.name}`);
 
-    // Broadcast channel update
     io.emit("channel:updated", channel);
 
-    // Also emit specific leave event
     io.emit("user:left-channel", { channelId, userId });
 
     res.json({
@@ -1225,15 +1151,12 @@ app.post("/api/channel/:channelId/leave", async (req, res) => {
   }
 });
 
-// Update channel settings
-// Update channel settings endpoint - MAKE IT MORE FLEXIBLE
 app.put("/api/channel/:channelId/settings", async (req, res) => {
   try {
     const { channelId } = req.params;
     const { name, description, image, bgcolor, isPrivate, updatedBy, userId } =
       req.body;
 
-    // Use either updatedBy or userId
     const updatingUser = updatedBy || userId;
 
     if (!updatingUser) {
@@ -1245,14 +1168,12 @@ app.put("/api/channel/:channelId/settings", async (req, res) => {
       return res.status(404).json({ error: "Channel not found" });
     }
 
-    // Check if user has permission to update
     if (channel.createdBy !== updatingUser) {
       return res
         .status(403)
         .json({ error: "Only channel creator can update settings" });
     }
 
-    // Delete old image if it's being changed
     if (
       image &&
       image !== channel.image &&
@@ -1262,7 +1183,6 @@ app.put("/api/channel/:channelId/settings", async (req, res) => {
       await deleteCloudinaryImage(channel.image);
     }
 
-    // Update channel data
     if (name) channel.name = name.trim();
     if (description !== undefined) channel.description = description;
     if (image) channel.image = image;
@@ -1273,7 +1193,6 @@ app.put("/api/channel/:channelId/settings", async (req, res) => {
 
     console.log(`✅ Channel settings updated: ${channel.name}`);
 
-    // Broadcast channel update to all clients
     io.emit("channel:updated", channel);
 
     res.json({
@@ -1287,14 +1206,11 @@ app.put("/api/channel/:channelId/settings", async (req, res) => {
   }
 });
 
-// Get channel by ID
-// Update channel
 app.put("/api/channel/:channelId", async (req, res) => {
   try {
     const { channelId } = req.params;
     const { name, description, image, bgcolor, userId, updatedBy } = req.body;
 
-    // Use either userId or updatedBy
     const updatingUser = userId || updatedBy;
 
     if (!updatingUser) {
@@ -1335,9 +1251,6 @@ app.put("/api/channel/:channelId", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// Update user profile endpoint
-// Update user profile endpoint - UPDATED WITH AVATAR DELETE
-// Update user profile endpoint - FIXED FOR MONGODB
 app.put("/api/user/profile", async (req, res) => {
   try {
     const { userId, username, email, image } = req.body;
@@ -1346,13 +1259,11 @@ app.put("/api/user/profile", async (req, res) => {
       return res.status(400).json({ error: "User ID is required" });
     }
 
-    // Find user in MongoDB
     const user = await User.findOne({ id: userId });
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Check if avatar is being changed and delete old one
     if (
       image &&
       image !== user.image &&
@@ -1360,34 +1271,31 @@ app.put("/api/user/profile", async (req, res) => {
       !user.image.includes("ui-avatars.com")
     ) {
       console.log(
-        `🔄 Avatar changed in profile update, deleting previous: ${user.image}`
+        `🔄 Avatar changed in profile update, deleting previous: ${user.image}`,
       );
       await deleteCloudinaryImage(user.image);
     }
 
-    // Check if username is already taken by another user
     if (username && username !== user.username) {
       const existingUsername = await User.findOne({
         username: username.trim().toLowerCase(),
-        id: { $ne: userId }, // Exclude current user
+        id: { $ne: userId },
       });
       if (existingUsername) {
         return res.status(400).json({ error: "Username already taken" });
       }
     }
 
-    // Check if email is already taken by another user
     if (email && email !== user.email) {
       const existingEmail = await User.findOne({
         email: email.trim().toLowerCase(),
-        id: { $ne: userId }, // Exclude current user
+        id: { $ne: userId },
       });
       if (existingEmail) {
         return res.status(400).json({ error: "Email already taken" });
       }
     }
 
-    // Update user data
     if (username) user.username = username.trim();
     if (email) user.email = email.trim().toLowerCase();
     if (image) user.image = image;
@@ -1395,7 +1303,6 @@ app.put("/api/user/profile", async (req, res) => {
     await user.save();
     console.log(`✅ User profile updated: ${user.username} (${user.id})`);
 
-    // Broadcast user update to all connected clients
     io.emit("user:updated", {
       id: user.id,
       username: user.username,
@@ -1420,11 +1327,6 @@ app.put("/api/user/profile", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// Add this in your Socket.IO connection handling section, after the other event handlers
-
-// Change password endpoint
-// Change password endpoint - FIXED FOR MONGODB
-// Change password endpoint - UPDATED WITH PASSWORD HASHING
 app.put("/api/user/change-password", async (req, res) => {
   try {
     const { userId, currentPassword, newPassword } = req.body;
@@ -1433,22 +1335,19 @@ app.put("/api/user/change-password", async (req, res) => {
       return res.status(400).json({ error: "All fields are required" });
     }
 
-    // Find user in MongoDB
     const user = await User.findOne({ id: userId });
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // VERIFY CURRENT PASSWORD WITH BCRYPT - REPLACE THIS SECTION
     const isCurrentPasswordValid = await bcrypt.compare(
       currentPassword,
-      user.password
+      user.password,
     );
     if (!isCurrentPasswordValid) {
       return res.status(400).json({ error: "Current password is incorrect" });
     }
 
-    // Validate new password strength
     const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
     if (!passwordRegex.test(newPassword)) {
       return res.status(400).json({
@@ -1457,12 +1356,9 @@ app.put("/api/user/change-password", async (req, res) => {
       });
     }
 
-    // HASH THE NEW PASSWORD - ADD THIS SECTION
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-
-    // Update password
-    user.password = hashedPassword; // CHANGED: Store hashed password
+    user.password = hashedPassword;
     await user.save();
 
     console.log(`✅ Password changed for user: ${user.username}`);
@@ -1477,9 +1373,6 @@ app.put("/api/user/change-password", async (req, res) => {
   }
 });
 
-// Upload user avatar endpoint
-// Upload user avatar endpoint - UPDATED WITH DELETE FUNCTIONALITY
-// Upload user avatar endpoint - FIXED FOR MONGODB
 app.post(
   "/api/upload/user-avatar",
   express.json({ limit: "10mb" }),
@@ -1494,7 +1387,6 @@ app.post(
         });
       }
 
-      // Find user in MongoDB
       const user = await User.findOne({ id: userId });
       if (!user) {
         return res.status(404).json({
@@ -1506,19 +1398,17 @@ app.post(
       const currentAvatarUrl = user.image;
       let deleteSuccess = true;
 
-      // Delete previous avatar if it's not the default UI Avatars one
       if (currentAvatarUrl && !currentAvatarUrl.includes("ui-avatars.com")) {
         console.log(`🔄 Deleting previous avatar for user ${userId}`);
         deleteSuccess = await deleteCloudinaryImage(currentAvatarUrl);
 
         if (!deleteSuccess) {
           console.log(
-            "⚠️ Failed to delete previous avatar, but continuing with upload..."
+            "⚠️ Failed to delete previous avatar, but continuing with upload...",
           );
         }
       }
 
-      // Upload new avatar to Cloudinary with better quality settings
       const result = await cloudinary.uploader.upload(image, {
         folder: "blabber/users",
         quality: "auto:best",
@@ -1532,11 +1422,9 @@ app.post(
 
       console.log("✅ New avatar uploaded to Cloudinary:", result.secure_url);
 
-      // Update user's image in MongoDB
       user.image = result.secure_url;
       await user.save();
 
-      // Broadcast user update
       io.emit("user:updated", {
         id: user.id,
         username: user.username,
@@ -1557,22 +1445,16 @@ app.post(
         message: "Upload failed: " + error.message,
       });
     }
-  }
+  },
 );
-// User registration endpoint
-// User registration endpoint
-// User registration endpoint
 app.post("/api/register", async (req, res) => {
   try {
     const { username, email, password, image, dateOfBirth } = req.body; // ADD dateOfBirth
 
-    // Input validation
     if (!username || !email || !password || !dateOfBirth) {
-      // ADD dateOfBirth check
       return res.status(400).json({ error: "All fields are required" });
     }
 
-    // Validate age (at least 13 years old)
     const birthDate = new Date(dateOfBirth);
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
@@ -1612,7 +1494,6 @@ app.post("/api/register", async (req, res) => {
       });
     }
 
-    // Check if user exists in MongoDB
     const existingUser = await User.findOne({
       $or: [
         { email: email.toLowerCase() },
@@ -1625,22 +1506,19 @@ app.post("/api/register", async (req, res) => {
         error: "User already exists with this email or username",
       });
     }
-
-    // HASH THE PASSWORD - ADD THIS SECTION
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Create user in MongoDB with dateOfBirth
     const newUser = new User({
       id: "user_" + Date.now(),
       username: username.trim(),
       email: email.trim().toLowerCase(),
-      dateOfBirth: new Date(dateOfBirth), // ADD THIS
+      dateOfBirth: new Date(dateOfBirth),
       password: hashedPassword,
       image:
         image ||
         `https://ui-avatars.com/api/?name=${encodeURIComponent(
-          username
+          username,
         )}&background=random&color=000000&bold=true`,
       isOnline: true,
       lastSeen: new Date(),
@@ -1649,7 +1527,6 @@ app.post("/api/register", async (req, res) => {
     await newUser.save();
     console.log(`✅ New user registered: ${username} (${email})`);
 
-    // Send welcome email (NEW CODE)
     setTimeout(async () => {
       try {
         const mailOptions = {
@@ -1715,9 +1592,8 @@ app.post("/api/register", async (req, res) => {
       } catch (emailError) {
         console.log(
           "⚠️ Failed to send welcome email:",
-          emailError instanceof Error ? emailError.message : String(emailError)
+          emailError instanceof Error ? emailError.message : String(emailError),
         );
-        // Don't fail the registration if email fails
       }
     }, 0);
 
@@ -1736,10 +1612,6 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-// Add after your existing endpoints, before Socket.IO connection
-
-// Forgot password endpoint
-// Forgot password endpoint - FIXED FOR MONGODB
 app.post("/api/auth/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
@@ -1753,12 +1625,10 @@ app.post("/api/auth/forgot-password", async (req, res) => {
       return res.status(400).json({ error: "Invalid email format" });
     }
 
-    // Check if user exists in MongoDB
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
-      // Don't reveal if email exists or not for security
       console.log(
-        `❓ Password reset requested for non-existent email: ${email}`
+        `❓ Password reset requested for non-existent email: ${email}`,
       );
       return res.json({
         message:
@@ -1766,29 +1636,25 @@ app.post("/api/auth/forgot-password", async (req, res) => {
       });
     }
 
-    // Generate reset token (simple version for demo)
     const resetToken =
       Math.random().toString(36).substring(2, 15) +
       Math.random().toString(36).substring(2, 15);
 
-    // Store reset token with expiration (1 hour)
     user.resetToken = resetToken;
     user.resetTokenExpiry = new Date(Date.now() + 3600000);
     await user.save();
 
     console.log(`🔐 Password reset token generated for: ${email}`);
 
-    // Send response immediately
     res.json({
       message:
         "If the email exists, password reset instructions have been sent",
     });
 
-    // Send reset email async
     setTimeout(async () => {
       try {
         const resetLink = `${FRONTEND_URL}/reset-password?token=${resetToken}&email=${encodeURIComponent(
-          email
+          email,
         )}`;
 
         const mailOptions = {
@@ -1865,8 +1731,6 @@ app.post("/api/auth/forgot-password", async (req, res) => {
   }
 });
 
-// Reset password endpoint
-// Reset password endpoint - FIXED FOR MONGODB
 app.post("/api/auth/reset-password", async (req, res) => {
   try {
     const { token, email, newPassword } = req.body;
@@ -1875,7 +1739,6 @@ app.post("/api/auth/reset-password", async (req, res) => {
       return res.status(400).json({ error: "All fields are required" });
     }
 
-    // Validate password strength
     const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
     if (!passwordRegex.test(newPassword)) {
       return res.status(400).json({
@@ -1884,13 +1747,11 @@ app.post("/api/auth/reset-password", async (req, res) => {
       });
     }
 
-    // Find user in MongoDB
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(400).json({ error: "Invalid reset token" });
     }
 
-    // Check if token matches and hasn't expired
     if (!user.resetToken || user.resetToken !== token) {
       return res.status(400).json({ error: "Invalid reset token" });
     }
@@ -1902,12 +1763,10 @@ app.post("/api/auth/reset-password", async (req, res) => {
       return res.status(400).json({ error: "Reset token has expired" });
     }
 
-    // HASH THE NEW PASSWORD - ADD THIS SECTION
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
 
-    // Update password and clear reset token
-    user.password = hashedPassword; // CHANGED: Store hashed password
+    user.password = hashedPassword;
     user.resetToken = undefined;
     user.resetTokenExpiry = undefined;
     await user.save();
@@ -1915,7 +1774,6 @@ app.post("/api/auth/reset-password", async (req, res) => {
     console.log(`✅ Password reset successful for: ${email}`);
 
     setTimeout(async () => {
-      // Send confirmation email
       try {
         const mailOptions = {
           from: process.env.EMAIL_USER,
@@ -1983,12 +1841,11 @@ app.post("/api/auth/reset-password", async (req, res) => {
         await sendEmail(
           email,
           "Your Blabber Password Has Been Reset ✅",
-          mailOptions.html
+          mailOptions.html,
         );
         console.log(`✅ Password reset confirmation sent to: ${email}`);
       } catch (emailError) {
         console.log("⚠️ Failed to send confirmation email:", emailError);
-        // Don't fail the reset if email fails
       }
     }, 0);
 
@@ -1998,7 +1855,6 @@ app.post("/api/auth/reset-password", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// User login endpoint
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -2017,7 +1873,6 @@ app.post("/api/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    // Update user as online
     user.isOnline = true;
     user.lastSeen = new Date();
     await user.save();
@@ -2039,7 +1894,6 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// Get channel by invite code
 app.get("/api/channel/invite/:inviteCode", async (req, res) => {
   try {
     const { inviteCode } = req.params;
@@ -2063,8 +1917,6 @@ app.get("/api/channel/invite/:inviteCode", async (req, res) => {
   }
 });
 
-// Join channel via invite code
-// Join channel via invite code - FIXED FOR MONGODB
 app.post("/api/channel/join/:inviteCode", async (req, res) => {
   try {
     const { inviteCode } = req.params;
@@ -2077,7 +1929,6 @@ app.post("/api/channel/join/:inviteCode", async (req, res) => {
       return res.status(404).json({ error: "Invalid invite link" });
     }
 
-    // Add user to channel members if not already a member
     if (!channel.members.includes(userId)) {
       channel.members.push(userId);
       await channel.save();
@@ -2093,20 +1944,15 @@ app.post("/api/channel/join/:inviteCode", async (req, res) => {
   }
 });
 
-// Get all users endpoint (optional)
 app.get("/api/users", async (req, res) => {
   try {
-    const users = await User.find({}, { password: 0 }); // Exclude passwords
+    const users = await User.find({}, { password: 0 });
     res.json(users);
   } catch (error) {
     console.error("Get users error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// ADD THESE MISSING ENDPOINTS BEFORE SOCKET.IO CONNECTION
-
-// Create channel endpoint
-// Create channel endpoint - WITH DUPLICATE NAME CHECK
 app.post("/api/channel/create", async (req, res) => {
   try {
     const { name, description, image, bgcolor, isPrivate, createdBy } =
@@ -2121,7 +1967,6 @@ app.post("/api/channel/create", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Check if channel name already exists (case insensitive)
     const existingChannel = await Channel.findOne({
       name: { $regex: new RegExp(`^${name.trim()}$`, "i") },
     });
@@ -2159,7 +2004,6 @@ app.post("/api/channel/create", async (req, res) => {
   } catch (error) {
     console.error("Create channel error:", error);
 
-    // Handle duplicate key errors specifically
     if (error.code === 11000 || error.name === "MongoError") {
       return res.status(400).json({
         error: `Channel "${name}" already exists. Please choose a different name.`,
@@ -2169,7 +2013,6 @@ app.post("/api/channel/create", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// Create or get existing DM channel - WITH INVITE CODE FIX
 app.post("/api/channels/direct-message", async (req, res) => {
   try {
     const { userId1, userId2 } = req.body;
@@ -2178,13 +2021,11 @@ app.post("/api/channels/direct-message", async (req, res) => {
       return res.status(400).json({ error: "Both user IDs are required" });
     }
 
-    // Sort user IDs to ensure consistent channel lookup
     const sortedUserIds = [userId1, userId2].sort();
     const dmChannelName = `dm_${sortedUserIds[0]}_${sortedUserIds[1]}`;
 
     console.log(`🔍 Looking for DM channel: ${dmChannelName}`);
 
-    // Check if DM channel already exists between these users
     const existingDM = await Channel.findOne({
       isDM: true,
       name: dmChannelName,
@@ -2199,7 +2040,6 @@ app.post("/api/channels/direct-message", async (req, res) => {
       });
     }
 
-    // Get user data for both users
     const user1 = await User.findOne({ id: userId1 });
     const user2 = await User.findOne({ id: userId2 });
 
@@ -2207,14 +2047,12 @@ app.post("/api/channels/direct-message", async (req, res) => {
       return res.status(404).json({ error: "One or both users not found" });
     }
 
-    // ✅ FIX: Generate unique invite code for DM channels
     const generateUniqueInviteCode = () => {
       return `dm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
     };
 
     const inviteCode = generateUniqueInviteCode();
 
-    // Create DM channel
     const dmChannel = new Channel({
       id: "dm_" + Date.now(),
       name: dmChannelName,
@@ -2237,17 +2075,16 @@ app.post("/api/channels/direct-message", async (req, res) => {
         },
       ],
       bgcolor: "#1A5D3E",
-      inviteCode: inviteCode, // ✅ Use unique code instead of null
-      inviteLink: `${FRONTEND_URL}/invite/${inviteCode}`, // Optional: include invite link
+      inviteCode: inviteCode,
+      inviteLink: `${FRONTEND_URL}/invite/${inviteCode}`,
       createdAt: new Date(),
     });
 
     await dmChannel.save();
     console.log(
-      `✅ Created new DM channel: ${dmChannel.id} with invite code: ${inviteCode}`
+      `✅ Created new DM channel: ${dmChannel.id} with invite code: ${inviteCode}`,
     );
 
-    // Emit real-time event for new DM channel
     io.emit("dm:channel:created", {
       channel: dmChannel,
       participants: [userId1, userId2],
@@ -2261,9 +2098,7 @@ app.post("/api/channels/direct-message", async (req, res) => {
   } catch (error: any) {
     console.error("❌ Create DM channel error:", error);
 
-    // Handle duplicate key error
     if (error.code === 11000) {
-      // If it's a duplicate, try to find the existing channel
       try {
         const sortedUserIds = [req.body.userId1, req.body.userId2].sort();
         const dmChannelName = `dm_${sortedUserIds[0]}_${sortedUserIds[1]}`;
@@ -2296,7 +2131,6 @@ app.post("/api/channels/direct-message", async (req, res) => {
     });
   }
 });
-// Get user's DM channels
 app.get("/api/user/:userId/direct-messages", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -2306,10 +2140,8 @@ app.get("/api/user/:userId/direct-messages", async (req, res) => {
       members: userId,
     }).sort({ updatedAt: -1 });
 
-    // Enrich with participant data
     const enrichedChannels = await Promise.all(
       dmChannels.map(async (channel) => {
-        // Get the other participant's info
         const otherParticipantId = channel.members.find((id) => id !== userId);
         const otherUser = await User.findOne({ id: otherParticipantId });
 
@@ -2328,7 +2160,7 @@ app.get("/api/user/:userId/direct-messages", async (req, res) => {
             channelId: channel.id,
           }).sort({ timestamp: -1 }),
         };
-      })
+      }),
     );
 
     res.json({
@@ -2340,7 +2172,6 @@ app.get("/api/user/:userId/direct-messages", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// Get all channels
 app.get("/api/channels", async (req, res) => {
   try {
     const channels = await Channel.find({});
@@ -2351,7 +2182,6 @@ app.get("/api/channels", async (req, res) => {
   }
 });
 
-// Get user's channels
 app.get("/api/user/:userId/channels", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -2372,8 +2202,6 @@ app.get("/api/user/:userId/channels", async (req, res) => {
   }
 });
 
-// Delete channel
-// FIXED Delete channel endpoint
 app.delete("/api/channel/:channelId", async (req, res) => {
   try {
     const { channelId } = req.params;
@@ -2382,7 +2210,6 @@ app.delete("/api/channel/:channelId", async (req, res) => {
     console.log(`🗑️ Delete request for channel: ${channelId}`);
     console.log(`👤 User attempting delete: ${userId || deletedBy}`);
 
-    // Use either userId or deletedBy
     const deletingUser = userId || deletedBy;
 
     if (!deletingUser) {
@@ -2397,7 +2224,7 @@ app.delete("/api/channel/:channelId", async (req, res) => {
     }
 
     console.log(
-      `🔍 Channel found: ${channel.name}, Creator: ${channel.createdBy}`
+      `🔍 Channel found: ${channel.name}, Creator: ${channel.createdBy}`,
     );
     console.log(`👤 Deleting user: ${deletingUser}`);
 
@@ -2408,23 +2235,19 @@ app.delete("/api/channel/:channelId", async (req, res) => {
 
     console.log(`✅ Permission granted, proceeding with deletion...`);
 
-    // Delete channel image from Cloudinary if exists
     if (channel.image && channel.image.includes("cloudinary.com")) {
       console.log(`🖼️ Deleting channel image from Cloudinary...`);
       await deleteCloudinaryImage(channel.image);
     }
 
-    // Delete all messages in the channel
     console.log(`🗑️ Deleting messages for channel: ${channelId}`);
     await Message.deleteMany({ channelId: channelId });
 
-    // Delete the channel
     console.log(`🗑️ Deleting channel: ${channelId}`);
     await Channel.deleteOne({ id: channelId });
 
     console.log(`✅ Channel successfully deleted: ${channel.name}`);
 
-    // Broadcast channel deletion to all clients
     io.emit("channel:deleted", {
       channelId: channelId,
       deletedBy: deletingUser,
@@ -2441,7 +2264,6 @@ app.delete("/api/channel/:channelId", async (req, res) => {
   }
 });
 
-// Update channel
 app.put("/api/channel/:channelId", async (req, res) => {
   try {
     const { channelId } = req.params;
@@ -2486,7 +2308,6 @@ app.put("/api/channel/:channelId", async (req, res) => {
   }
 });
 
-// Get channel messages
 app.get(
   "/api/channel/:channelId/messages",
   async (req: Request, res: Response) => {
@@ -2494,7 +2315,6 @@ app.get(
       const { channelId } = req.params;
       const { before, limit = "50" } = req.query;
 
-      // Validate channelId
       if (!channelId) {
         return res.status(400).json({
           success: false,
@@ -2502,7 +2322,6 @@ app.get(
         });
       }
 
-      // Validate limit
       const limitNum = parseInt(limit as string);
       if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
         return res.status(400).json({
@@ -2512,39 +2331,33 @@ app.get(
       }
 
       console.log(
-        `📥 Fetching messages for channel ${channelId}, before: ${before}, limit: ${limitNum}`
+        `📥 Fetching messages for channel ${channelId}, before: ${before}, limit: ${limitNum}`,
       );
 
-      // Build query
       let query: any = { channelId };
 
-      // If "before" parameter is provided, get messages older than this message
       if (before && typeof before === "string") {
-        // First, find the reference message to get its timestamp
         const referenceMessage = await Message.findOne({ id: before });
         if (referenceMessage) {
           query.timestamp = { $lt: referenceMessage.timestamp };
           console.log(
-            `🔍 Fetching messages before: ${referenceMessage.timestamp}`
+            `🔍 Fetching messages before: ${referenceMessage.timestamp}`,
           );
         } else {
           console.log(`❌ Reference message not found: ${before}`);
-          // If reference message not found, return empty array
           return res.json([]);
         }
       }
 
-      // Fetch messages with pagination
       const messages = await Message.find(query)
-        .sort({ timestamp: 1 }) // Get oldest first (for chronological order)
+        .sort({ timestamp: 1 })
         .limit(limitNum)
         .exec();
 
       console.log(
-        `✅ Found ${messages.length} messages for channel ${channelId}`
+        `✅ Found ${messages.length} messages for channel ${channelId}`,
       );
 
-      // Return messages in chronological order (oldest first)
       res.json(messages);
     } catch (error) {
       console.error("❌ Get messages error:", error);
@@ -2554,10 +2367,9 @@ app.get(
         details: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  }
+  },
 );
 
-// Delete message
 app.delete("/api/message/:messageId", async (req, res) => {
   try {
     const { messageId } = req.params;
@@ -2587,7 +2399,6 @@ app.delete("/api/message/:messageId", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// Mark message as seen
 app.post("/api/message/:messageId/seen", async (req, res) => {
   try {
     const { messageId } = req.params;
@@ -2602,7 +2413,6 @@ app.post("/api/message/:messageId/seen", async (req, res) => {
       return res.status(404).json({ error: "Message not found" });
     }
 
-    // Check if user has already seen this message
     const alreadySeen = message.seenBy.some((seen) => seen.userId === userId);
 
     if (!alreadySeen) {
@@ -2612,7 +2422,6 @@ app.post("/api/message/:messageId/seen", async (req, res) => {
       });
       await message.save();
 
-      // Broadcast the update to all clients in the channel
       io.emit("message:seen", {
         messageId,
         userId,
@@ -2628,7 +2437,6 @@ app.post("/api/message/:messageId/seen", async (req, res) => {
   }
 });
 
-// Get unseen messages count for a user
 app.get("/api/user/:userId/unseen-count", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -2636,7 +2444,7 @@ app.get("/api/user/:userId/unseen-count", async (req, res) => {
 
     let query = {
       "seenBy.userId": { $ne: userId },
-      userId: { $ne: userId }, // Don't count user's own messages
+      userId: { $ne: userId },
     };
 
     if (channelId) {
@@ -2652,7 +2460,6 @@ app.get("/api/user/:userId/unseen-count", async (req, res) => {
   }
 });
 
-// Get message seen status
 app.get("/api/message/:messageId/seen-status", async (req, res) => {
   try {
     const { messageId } = req.params;
@@ -2672,10 +2479,9 @@ app.get("/api/message/:messageId/seen-status", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// In your server.ts - make sure it's a GET endpoint
 app.get("/api/allusers", async (req, res) => {
   try {
-    const users = await User.find({}, { password: 0 }); // Exclude passwords
+    const users = await User.find({}, { password: 0 });
     res.json(users);
   } catch (error) {
     console.error("Get all users error:", error);
@@ -2683,8 +2489,6 @@ app.get("/api/allusers", async (req, res) => {
   }
 });
 
-// Logout endpoint
-// Enhanced logout endpoint - HANDLES GOOGLE ACCOUNTS
 app.post("/api/logout", async (req, res) => {
   try {
     const { userId, logoutAllDevices = false } = req.body;
@@ -2698,14 +2502,12 @@ app.post("/api/logout", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Update user as offline
     user.isOnline = false;
     user.lastSeen = new Date();
     await user.save();
 
     console.log(`✅ User logged out: ${user.username} (${userId})`);
 
-    // Broadcast user logout to all connected clients
     io.emit("user:logged-out", {
       userId: userId,
       username: user.username,
@@ -2713,9 +2515,7 @@ app.post("/api/logout", async (req, res) => {
       lastSeen: new Date(),
     });
 
-    // If logoutAllDevices is true, clear any session tokens (for future use)
     if (logoutAllDevices) {
-      // You can add session token cleanup here if you implement sessions
       console.log(`🔐 Logged out from all devices: ${user.username}`);
     }
 
@@ -2729,15 +2529,11 @@ app.post("/api/logout", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// Socket.IO connection handling
-// Socket.IO connection handling - FIXED FOR MONGODB
 io.on("connection", (socket) => {
   console.log(`✅ User connected: ${socket.id}`);
 
-  // Handle authentication
   socket.on("authenticate", (userData) => {
     console.log(`🔐 User authenticated: ${userData.username}`);
-    // Store user-socket mapping if needed
   });
 
   socket.on("disconnect", (reason) => {
@@ -2748,29 +2544,22 @@ io.on("connection", (socket) => {
     console.error(`💥 Socket error for ${socket.id}:`, error);
   });
 
-  // In-memory storage for active socket connections only
-  const activeSockets = new Map<string, any>(); // socketId -> userData
-  // Friend request notifications
+  const activeSockets = new Map<string, any>();
   socket.on("friend:request:read", (data) => {
-    // Mark friend request as read (optional)
     console.log(`Friend request read by user: ${data.userId}`);
   });
 
-  // Friend online status
-  // Friend online status
   socket.on("friend:online", async (userId) => {
     try {
-      // Get user's friends
       const friendships = await Friends.find({ userId }).populate(
         "friendId",
-        "id username image isOnline"
+        "id username image isOnline",
       );
 
       const onlineFriends = friendships
         .filter((f) => {
-          // FIX: Check if friendId is populated and has isOnline property
           if (typeof f.friendId === "object" && f.friendId !== null) {
-            return (f.friendId as any).isOnline; // Type assertion
+            return (f.friendId as any).isOnline;
           }
           return false;
         })
@@ -2780,32 +2569,27 @@ io.on("connection", (socket) => {
           }
           return null;
         })
-        .filter(Boolean); // Remove null values
+        .filter(Boolean);
 
-      // Send online friends list to the user
       socket.emit("friends:online", onlineFriends);
     } catch (error) {
       console.error("Get online friends error:", error);
     }
   });
-  // User joins
   socket.on("user:join", async (userData, channelId = "1") => {
     try {
       console.log(`👤 User join event: ${userData.username} (${userData.id})`);
 
-      // Find user in MongoDB and update online status
       const user = await User.findOne({ id: userData.id });
       if (!user) {
         console.log(`❌ User not found in database: ${userData.id}`);
         return;
       }
 
-      // Update user as online
       user.isOnline = true;
       user.lastSeen = new Date();
       await user.save();
 
-      // Store socket connection
       activeSockets.set(socket.id, {
         ...user.toObject(),
         socketId: socket.id,
@@ -2814,23 +2598,18 @@ io.on("connection", (socket) => {
 
       console.log(`✅ User ${user.username} added to active sockets`);
 
-      // Get channels the user is a member of
       const userChannels = await Channel.find({
         $or: [{ members: user.id }, { createdBy: user.id }],
       });
 
-      // Get online users from database
       const onlineUsers = await User.find({ isOnline: true }, { password: 0 });
 
-      // Get channel messages
       const channelMessages = await Message.find({ channelId: channelId });
 
-      // Send current state to the user
       socket.emit("channel:list", userChannels);
       socket.emit("message:history", channelMessages);
       io.emit("user:online", onlineUsers);
 
-      // Broadcast to other clients
       socket.broadcast.emit(
         "user:joined",
         {
@@ -2840,7 +2619,7 @@ io.on("connection", (socket) => {
           image: user.image,
           isOnline: true,
         },
-        channelId
+        channelId,
       );
     } catch (error) {
       console.error("User join error:", error);
@@ -2849,12 +2628,10 @@ io.on("connection", (socket) => {
   socket.on("user:deleted", (data) => {
     console.log(`🗑️ User account deleted: ${data.userId}`);
 
-    // Broadcast to all clients that this user was deleted
     io.emit("user:deleted", { userId: data.userId });
 
-    // Force disconnect any sockets for this user
     const userSockets = Array.from(activeSockets.entries()).filter(
-      ([_, userData]) => userData.id === data.userId
+      ([_, userData]) => userData.id === data.userId,
     );
 
     for (const [socketId, _] of userSockets) {
@@ -2863,31 +2640,27 @@ io.on("connection", (socket) => {
     }
 
     console.log(
-      `✅ Disconnected ${userSockets.length} sockets for deleted user`
+      `✅ Disconnected ${userSockets.length} sockets for deleted user`,
     );
   });
-  // User update
   socket.on("user:update", async (updatedUser) => {
     try {
       console.log(`🔄 User update received: ${updatedUser.username}`);
 
-      // Update user in MongoDB
       await User.findOneAndUpdate(
         { id: updatedUser.id },
         {
           username: updatedUser.username,
           email: updatedUser.email,
           image: updatedUser.image,
-        }
+        },
       );
 
-      // Update in active sockets if online
       const activeUser = activeSockets.get(socket.id);
       if (activeUser) {
         Object.assign(activeUser, updatedUser);
       }
 
-      // Broadcast the update to all clients
       io.emit("user:updated", updatedUser);
     } catch (error) {
       console.error("User update error:", error);
@@ -2895,11 +2668,7 @@ io.on("connection", (socket) => {
   });
   socket.on("channel:deleted", (data) => {
     console.log(`🗑️ Channel deleted event received: ${data.channelId}`);
-    // Update your channels list in real-time
-    // This will remove the deleted channel from all users' lists
   });
-  // Join channel
-  // In your server code, find the "channel:join" event handler and REPLACE it with:
 
   socket.on("channel:join", async (channelId, userId) => {
     try {
@@ -2913,29 +2682,23 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // JOIN SOCKET.IO ROOM for this channel
       socket.join(`channel-${channelId}`);
       console.log(`✅ Socket joined room: channel-${channelId}`);
 
-      // IMMEDIATELY send empty array first to clear previous messages
       socket.emit("message:history", []);
 
-      // Then load and send actual messages
       const channelMessages = await Message.find({ channelId: channelId }).sort(
-        { timestamp: 1 }
+        { timestamp: 1 },
       );
 
       console.log(
-        `📤 Sending ${channelMessages.length} messages to ${activeUser.username}`
+        `📤 Sending ${channelMessages.length} messages to ${activeUser.username}`,
       );
 
-      // Send messages in smaller batches for faster display
       if (channelMessages.length > 0) {
-        // Send first batch immediately
         const firstBatch = channelMessages.slice(0, 20);
         socket.emit("message:history", firstBatch);
 
-        // Send remaining messages in background
         if (channelMessages.length > 20) {
           setTimeout(() => {
             const remainingMessages = channelMessages.slice(20);
@@ -2952,9 +2715,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Message send
-  // Add this endpoint to get unread count per channel for a user
-  // In server.ts - ADD THIS after your existing unread endpoint
   app.get("/api/user/:userId/unread-by-channel", async (req, res) => {
     try {
       const { userId } = req.params;
@@ -2968,11 +2728,11 @@ io.on("connection", (socket) => {
         channelIds.map(async (channelId) => {
           const count = await Message.countDocuments({
             channelId: channelId,
-            userId: { $ne: userId }, // Not user's own messages
-            "seenBy.userId": { $ne: userId }, // User hasn't seen them
+            userId: { $ne: userId },
+            "seenBy.userId": { $ne: userId },
           });
           return { channelId, count };
-        })
+        }),
       );
 
       const unreadByChannel = unreadCounts.reduce(
@@ -2980,7 +2740,7 @@ io.on("connection", (socket) => {
           acc[channelId] = count;
           return acc;
         },
-        {} as Record<string, number>
+        {} as Record<string, number>,
       );
 
       res.json({ success: true, unreadByChannel });
@@ -2990,8 +2750,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Update the existing message:seen socket handler to broadcast unread count updates
-  // Replace your existing socket.on("message:seen") with this:
   socket.on("message:seen", async (data) => {
     try {
       const { messageId, userId } = data;
@@ -3008,7 +2766,6 @@ io.on("connection", (socket) => {
         });
         await message.save();
 
-        // Broadcast to all clients in the channel
         io.emit("message:seen", {
           messageId,
           userId,
@@ -3016,14 +2773,12 @@ io.on("connection", (socket) => {
           channelId: message.channelId,
         });
 
-        // Calculate and broadcast updated unread count for this user
         const unreadCount = await Message.countDocuments({
           channelId: message.channelId,
           userId: { $ne: userId },
           "seenBy.userId": { $ne: userId },
         });
 
-        // Emit to specific user's socket
         io.to(`user-${userId}`).emit("unread:update", {
           channelId: message.channelId,
           count: unreadCount,
@@ -3053,17 +2808,18 @@ io.on("connection", (socket) => {
     if (messageBatch.length > 0) {
       console.log(`📦 Flushing batch of ${messageBatch.length} messages`);
 
-      // Group messages by channel for efficient broadcasting
       const messagesByChannel: { [channelId: string]: BatchedMessage[] } =
-        messageBatch.reduce((acc, message) => {
-          if (!acc[message.channelId]) {
-            acc[message.channelId] = [];
-          }
-          acc[message.channelId].push(message);
-          return acc;
-        }, {} as { [channelId: string]: BatchedMessage[] });
+        messageBatch.reduce(
+          (acc, message) => {
+            if (!acc[message.channelId]) {
+              acc[message.channelId] = [];
+            }
+            acc[message.channelId].push(message);
+            return acc;
+          },
+          {} as { [channelId: string]: BatchedMessage[] },
+        );
 
-      // Broadcast batched messages to respective channels
       Object.entries(messagesByChannel).forEach(([channelId, messages]) => {
         io.emit("message:batch", {
           channelId,
@@ -3077,7 +2833,6 @@ io.on("connection", (socket) => {
     batchTimeout = null;
   };
 
-  // Optimized message:send handler with batching
   socket.on("message:send", async (messageData) => {
     try {
       const startTime = Date.now();
@@ -3103,7 +2858,6 @@ io.on("connection", (socket) => {
       let message;
 
       if (messageData.id) {
-        // Handle message edits (no batching for edits)
         message = await Message.findOne({ id: messageData.id });
         if (!message || message.userId !== activeUser.id) {
           console.log("❌ Edit rejected: unauthorized");
@@ -3114,7 +2868,6 @@ io.on("connection", (socket) => {
         await message.save();
         console.log(`✏️ Message edited: ${message.id}`);
 
-        // Broadcast edit immediately
         io.emit("message:updated", {
           id: message.id,
           content: message.content,
@@ -3125,7 +2878,6 @@ io.on("connection", (socket) => {
           timestamp: message.timestamp,
         });
       } else {
-        // Handle new messages (with batching)
         message = new Message({
           id: uuidv4(),
           content: messageData.content,
@@ -3140,37 +2892,30 @@ io.on("connection", (socket) => {
 
         const messageType = messageData.type?.toUpperCase() || "TEXT";
         console.log(
-          `💬 ${messageType} message from ${activeUser.username} in channel ${messageData.channelId}`
+          `💬 ${messageType} message from ${activeUser.username} in channel ${messageData.channelId}`,
         );
 
-        // Send immediately to sender (no delay for user experience)
         socket.emit("message:receive", message);
         console.log(`✅ Message sent back to sender: ${activeUser.username}`);
 
-        // Add to batch for broadcasting to other users
         messageBatch.push(message);
         console.log(`📥 Added to batch. Batch size: ${messageBatch.length}`);
 
-        // Optimized batching logic
         if (messageBatch.length >= 3) {
-          // Flush immediately if we have 3+ messages
           if (batchTimeout) {
             clearTimeout(batchTimeout);
             batchTimeout = null;
           }
           flushMessageBatch();
         } else if (!batchTimeout) {
-          // Wait max 50ms for more messages before flushing
           batchTimeout = setTimeout(flushMessageBatch, 50);
         }
 
-        // Handle unread counts (outside of batching since it's lightweight)
         if (!messageData.id) {
           const otherMembers = channel.members.filter(
-            (memberId) => memberId !== activeUser.id
+            (memberId) => memberId !== activeUser.id,
           );
 
-          // Optimize unread count updates - batch these too if needed
           for (const memberId of otherMembers) {
             const unreadCount = await Message.countDocuments({
               channelId: messageData.channelId,
@@ -3192,7 +2937,6 @@ io.on("connection", (socket) => {
       console.error("❌ Message send error:", error);
       socket.emit("error", { message: "Failed to send message" });
 
-      // Clear batch on error
       if (batchTimeout) {
         clearTimeout(batchTimeout);
         batchTimeout = null;
@@ -3201,7 +2945,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Add a force flush function for when users disconnect or switch channels
   const forceFlushMessageBatch = () => {
     if (batchTimeout) {
       clearTimeout(batchTimeout);
@@ -3210,7 +2953,6 @@ io.on("connection", (socket) => {
     flushMessageBatch();
   };
 
-  // Force flush on certain events
   socket.on("disconnect", () => {
     forceFlushMessageBatch();
   });
@@ -3243,24 +2985,22 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // Update the message (only content for GIF messages)
       message.content = messageData.content;
       await message.save();
       console.log(`✅ Message updated: ${message.id}`);
 
-      // BROADCAST to everyone in the channel
       io.emit("message:updated", {
         id: message.id,
         content: message.content,
         userId: message.userId,
         username: message.username,
         channelId: message.channelId,
-        type: message.type, // This now includes "gif" type
+        type: message.type,
         timestamp: message.timestamp,
       });
 
       console.log(
-        `📡 Update broadcast sent to all clients for message ${message.id}`
+        `📡 Update broadcast sent to all clients for message ${message.id}`,
       );
     } catch (error) {
       console.error("❌ Edit message error:", error);
@@ -3268,17 +3008,14 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Typing indicator
   socket.on("user:typing", (typingData) => {
     console.log(`⌨️  ${typingData.username} is typing...`);
 
-    // Broadcast to other clients
     socket.broadcast.emit("user:typing", {
       ...typingData,
       isTyping: true,
     });
 
-    // Auto-stop after 3 seconds
     setTimeout(() => {
       socket.broadcast.emit("user:typing", {
         ...typingData,
@@ -3287,17 +3024,15 @@ io.on("connection", (socket) => {
     }, 3000);
   });
 
-  // Switch channel
   socket.on("user:switchChannel", async (userId, newChannelId) => {
     try {
       const activeUser = activeSockets.get(socket.id);
       if (activeUser) {
         activeUser.currentChannelId = newChannelId;
 
-        // Update online users list
         const onlineUsers = await User.find(
           { isOnline: true },
-          { password: 0 }
+          { password: 0 },
         );
         io.emit("user:online", onlineUsers);
       }
@@ -3305,13 +3040,10 @@ io.on("connection", (socket) => {
       console.error("Switch channel error:", error);
     }
   });
-  // User identification
   socket.on("user:identify", (userId: string) => {
     socket.join(`user-${userId}`);
     console.log(`✅ User ${userId} joined room user-${userId}`);
   });
-
-  // In Socket.IO connection handling - UPDATE THESE EVENT HANDLERS:
 
   socket.on("webrtc:call-offer", (data) => {
     console.log("📞 Call offer received:", {
@@ -3319,14 +3051,12 @@ io.on("connection", (socket) => {
       to: data.to,
       audioOnly: data.audioOnly,
       fromImage: data.fromImage,
-      isDMChannel: data.isDMChannel, // Add this log
-      isChannelCall: data.isChannelCall, // Also log this
+      isDMChannel: data.isDMChannel,
+      isChannelCall: data.isChannelCall,
     });
 
-    // Make sure we're emitting ALL the data including isDMChannel
     io.to(`user-${data.to}`).emit("webrtc:call-offer", {
-      ...data, // Spread all properties
-      // Ensure these fields are included
+      ...data,
       isDMChannel: data.isDMChannel || false,
       channelImage: data.channelImage || "",
       channelName: data.channelName || "",
@@ -3339,19 +3069,19 @@ io.on("connection", (socket) => {
       to: data.to,
       fromImage: data.fromImage,
       isChannelCall: data.isChannelCall,
-      isDMChannel: data.isDMChannel, // Add this log
+      isDMChannel: data.isDMChannel,
     });
 
     io.to(`user-${data.to}`).emit("webrtc:call-answer", {
-      ...data, // Spread all properties
-      isDMChannel: data.isDMChannel || false, // Ensure it's included
+      ...data,
+      isDMChannel: data.isDMChannel || false,
     });
   });
 
   socket.on("webrtc:ice-candidate", (data) => {
     console.log(`🧊 ICE candidate from ${data.from} to ${data.to}`, {
       isChannelCall: data.isChannelCall,
-      isDMChannel: data.isDMChannel, // Add this log
+      isDMChannel: data.isDMChannel,
     });
 
     io.to(`user-${data.to}`).emit("webrtc:ice-candidate", {
@@ -3361,7 +3091,6 @@ io.on("connection", (socket) => {
       fromImage: data.fromImage,
       isChannelCall: data.isChannelCall,
       channelId: data.channelId,
-      // ADD THIS:
       isDMChannel: data.isDMChannel || false,
     });
   });
@@ -3374,32 +3103,27 @@ io.on("connection", (socket) => {
     io.to(`user-${data.to}`).emit("webrtc:call-reject", { from: data.from });
   });
 
-  // Disconnect
-  // Enhanced disconnect handler
   socket.on("disconnect", async (reason) => {
     try {
       const activeUser = activeSockets.get(socket.id);
       if (activeUser) {
         console.log(
-          `❌ User disconnected: ${activeUser.username} (${socket.id}) - Reason: ${reason}`
+          `❌ User disconnected: ${activeUser.username} (${socket.id}) - Reason: ${reason}`,
         );
 
-        // Only update as offline if this is their only active connection
         const userActiveConnections = Array.from(
-          activeSockets.entries()
+          activeSockets.entries(),
         ).filter(([_, userData]) => userData.id === activeUser.id);
 
         if (userActiveConnections.length <= 1) {
-          // This was their last connection, mark as offline
           await User.findOneAndUpdate(
             { id: activeUser.id },
             {
               isOnline: false,
               lastSeen: new Date(),
-            }
+            },
           );
 
-          // Broadcast user left only if this was their last connection
           socket.broadcast.emit(
             "user:left",
             {
@@ -3410,24 +3134,22 @@ io.on("connection", (socket) => {
               isOnline: false,
               lastSeen: new Date(),
             },
-            activeUser.currentChannelId || "1"
+            activeUser.currentChannelId || "1",
           );
 
           console.log(`📢 Broadcasted user offline: ${activeUser.username}`);
         }
 
-        // Remove from active sockets
         activeSockets.delete(socket.id);
 
-        // Update online users list
         const onlineUsers = await User.find(
           { isOnline: true },
-          { password: 0 }
+          { password: 0 },
         );
         io.emit("user:online", onlineUsers);
       } else {
         console.log(
-          `❌ Socket disconnected: ${socket.id} (no user found) - Reason: ${reason}`
+          `❌ Socket disconnected: ${socket.id} (no user found) - Reason: ${reason}`,
         );
       }
     } catch (error) {
@@ -3441,14 +3163,12 @@ app.get("/api/link-preview", async (req: Request, res: Response) => {
   try {
     const { url } = req.query;
 
-    // Validate URL parameter
     if (!url || typeof url !== "string") {
       return res
         .status(400)
         .json({ error: "URL parameter is required and must be a string" });
     }
 
-    // Validate URL format
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(url);
@@ -3456,23 +3176,20 @@ app.get("/api/link-preview", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Invalid URL format" });
     }
 
-    // Optional: Validate allowed domains for security
     const allowedProtocols = ["http:", "https:"];
     if (!allowedProtocols.includes(parsedUrl.protocol)) {
       return res.status(400).json({ error: "Invalid URL protocol" });
     }
 
-    // Optional: Block certain domains for security
     const blockedDomains = ["localhost", "127.0.0.1", "0.0.0.0", "internal"];
     if (blockedDomains.some((domain) => parsedUrl.hostname.includes(domain))) {
       return res.status(400).json({ error: "Domain not allowed" });
     }
 
-    // Create abort controller for timeout
     abortController = new AbortController();
     const timeoutId = setTimeout(() => {
       abortController?.abort();
-    }, 10000); // 10 second timeout
+    }, 10000);
 
     const response = await fetch(parsedUrl.toString(), {
       headers: {
@@ -3497,18 +3214,16 @@ app.get("/api/link-preview", async (req: Request, res: Response) => {
 
     const html = await response.text();
 
-    // Enhanced meta tag parsing with regex improvements
     const getMetaContent = (property: string): string | null => {
       const regex = new RegExp(
         `<meta[^>]*(property|name)=["']${property}["'][^>]*content=["']([^"']*)["']`,
-        "i"
+        "i",
       );
       const match = html.match(regex);
       return match ? match[2] : null;
     };
 
     const getTitle = (): string | null => {
-      // Try OpenGraph title first, then regular title
       const ogTitle = getMetaContent("og:title");
       if (ogTitle) return ogTitle;
 
@@ -3517,7 +3232,6 @@ app.get("/api/link-preview", async (req: Request, res: Response) => {
     };
 
     const getDescription = (): string | null => {
-      // Try OpenGraph description, then Twitter, then regular meta description
       const ogDesc = getMetaContent("og:description");
       if (ogDesc) return ogDesc;
 
@@ -3528,7 +3242,6 @@ app.get("/api/link-preview", async (req: Request, res: Response) => {
     };
 
     const getImage = (): string | null => {
-      // Try OpenGraph image, then Twitter image
       const ogImage = getMetaContent("og:image");
       if (ogImage) {
         try {
@@ -3566,16 +3279,14 @@ app.get("/api/link-preview", async (req: Request, res: Response) => {
     const siteName = getSiteName();
 
     res.json({
-      title: title ? title.trim().substring(0, 200) : null, // Limit title length
-      description: description ? description.trim().substring(0, 300) : null, // Limit description length
+      title: title ? title.trim().substring(0, 200) : null,
+      description: description ? description.trim().substring(0, 300) : null,
       image,
       siteName: siteName ? siteName.trim() : null,
       url: parsedUrl.toString(),
     });
   } catch (error: any) {
     console.error("Link preview error:", error);
-
-    // Clear timeout if it hasn't fired yet
 
     if (error.name === "AbortError") {
       return res.status(408).json({
