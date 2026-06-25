@@ -1,8 +1,8 @@
 <h1 align="center">Blabber Chat Backend</h1>
-<h3 align="center">Event-Driven WebSocket Engine & Real-Time Messaging Infrastructure</h3>
+<h3 align="center">WebSocket Engine & Real-Time Messaging Infrastructure</h3>
 
 <p align="center">
-  The high-performance, asynchronous server-side engine powering <strong>Blabber Chat</strong>, a real-time messaging platform inspired by Discord. This backend orchestrates persistent full-duplex socket connections, secure stateless user authentication pipelines, and distributed real-time message routing layers.
+  The server-side engine powering <strong>Blabber Chat</strong>, a real-time messaging platform inspired by Discord. This backend sychronizes persistent full-duplex socket connections, secure stateless user authentication pipelines, and real-time message routing layers.
 </p>
 
 <p align="center">
@@ -16,17 +16,7 @@
 
 ---
 
-### ✨ Core Architecture
-
-* **Full-Duplex WebSocket Transport:** Employs persistent, bi-directional **Socket.IO** connectivity to manage low-latency message delivery, keeping client interfaces updated without HTTP polling overhead.
-* **Stateless Token Guardrails:** Couples cryptographically signed JSON Web Tokens (JWT) with secure HTTP handshakes to protect RESTful endpoints and validate websocket handshakes during connection upgrade lifecycles.
-* **Reactive State & Event Pipelines:** Engineered with an asynchronous event paradigm to broadcast transient client metrics, managing typing indicators, user presence arrays, and live thread mutation signals across dynamic channel namespaces.
-* **Decoupled Resource Routing:** Implements modular Express controllers separating standard relational routing parameters (user profiles, guild initialization, channel generation) from active socket event handling loops.
-* **Document-Oriented Storage Topology:** Optimized denormalized MongoDB document structures built for scalable message-history querying and performant array operations on nested chat history timelines.
-
----
-
-### 🛠️ Production Tech Stack
+### Production Tech Stack
 
 **Runtime & Real-Time Layer**
 <p align="left">
@@ -57,18 +47,7 @@
 
 ---
 
-### 📋 RESTful API Reference (Core Routing)
-
-| Route Namespace | HTTP Method | Action / Context Description | Access Control |
-| :--- | :--- | :--- | :--- |
-| `/api/auth/signup` | **POST** | Allocates new user records into persistence database; hashes credentials. | Public |
-| `/api/auth/login` | **POST** | Validates identity metrics; issues secure Bearer JWT authorization token. | Public |
-| `/api/chats` | **GET** | Pulls list of authorized conversations and metadata assigned to request context. | Private (JWT) |
-| `/api/messages/:chatId` | **GET** | Fetches paginated, historical message documentation within a specific channel block. | Private (JWT) |
-
----
-
-### 🚀 Setup & Local Development
+### Setup & Local Development
 
 **1. Clone the repository:**
 ```bash
